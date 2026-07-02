@@ -1,0 +1,4 @@
+Editor module implemented and verified.
+- Added editor/code_editor.py with a PySide6-based editor wrapper.
+- Supports QScintilla when available and falls back to QPlainTextEdit otherwise.
+- Verified with pytest: 1 passed.
