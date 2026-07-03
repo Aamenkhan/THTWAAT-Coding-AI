@@ -9,12 +9,15 @@ class OllamaClient:
     def __init__(self, base_url: Optional[str] = None):
         self.base_url = base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
-    def _post(self, prompt: str, model: str, stream: bool):
+    def _post(self, prompt: str, model: str, stream: bool, format: Optional[str] = None):
         try:
+            payload = {"model": model, "prompt": prompt, "stream": stream}
+            if format:
+                payload["format"] = format
             response = requests.post(
                 f"{self.base_url}/api/generate",
-                json={"model": model, "prompt": prompt, "stream": stream},
-                timeout=60,
+                json=payload,
+                timeout=180,
                 stream=stream,
             )
         except requests.exceptions.ConnectionError as exc:
@@ -32,8 +35,8 @@ class OllamaClient:
             raise RuntimeError(err_msg)
         return response
 
-    def generate(self, prompt: str, model: str = "qwen2.5-coder:3b") -> str:
-        response = self._post(prompt, model, stream=False)
+    def generate(self, prompt: str, model: str = "qwen2.5-coder:3b", format: Optional[str] = None) -> str:
+        response = self._post(prompt, model, stream=False, format=format)
         try:
             data = response.json()
         finally:
