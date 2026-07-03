@@ -383,37 +383,44 @@ class Pipeline:
             if check_stop(): return self._cancel(run, emit)
 
             # ── Stage 9: COMMIT (approval gate) ──────────────────────
-            emit(Stage.COMMIT, "⏸ Generating commit message. Awaiting commit approval...")
-            try:
-                run.commit_message = self.agent.git.generate_commit_message()
-            except Exception:
-                run.commit_message = f"feat: {goal[:60]}"
-
-            emit(Stage.COMMIT, f"Proposed message: '{run.commit_message}'",
-                 {"commit_message": run.commit_message})
-
-            if on_approval:
-                allowed = on_approval(run, Stage.COMMIT)
-                if allowed:
-                    try:
-                        run.commit_hash = self.agent.git.commit(run.commit_message)
+            if not accepted_files:
+                emit(Stage.COMMIT, "Nothing to commit — no changes were accepted.")
+                run.stage_results[Stage.COMMIT] = StageResult(
+                    stage=Stage.COMMIT, ok=True, message="Nothing to commit — no changes were accepted."
+                )
+            else:
+                emit(Stage.COMMIT, "⏸ Generating commit message. Awaiting commit approval...")
+                try:
+                    run.commit_message = self.agent.git.generate_commit_message()
+                except Exception:
+                    run.commit_message = f"feat: {goal[:60]}"
+    
+                emit(Stage.COMMIT, f"Proposed message: '{run.commit_message}'",
+                     {"commit_message": run.commit_message})
+    
+                if on_approval:
+                    allowed = on_approval(run, Stage.COMMIT)
+                    if allowed:
+                        try:
+                            # explicitly pass accepted files, setting allow_sensitive=True because the user explicitly approved them in diff review
+                            run.commit_hash = self.agent.git.commit(run.commit_message, files=accepted_files, allow_sensitive=True)
+                            run.stage_results[Stage.COMMIT] = StageResult(
+                                stage=Stage.COMMIT, ok=True,
+                                message=f"Committed: {run.commit_message}",
+                                data={"hash": run.commit_hash, "message": run.commit_message},
+                            )
+                        except Exception as exc:
+                            run.stage_results[Stage.COMMIT] = StageResult(
+                                stage=Stage.COMMIT, ok=False, message=f"Commit failed: {exc}"
+                            )
+                    else:
                         run.stage_results[Stage.COMMIT] = StageResult(
-                            stage=Stage.COMMIT, ok=True,
-                            message=f"Committed: {run.commit_message}",
-                            data={"hash": run.commit_hash, "message": run.commit_message},
-                        )
-                    except Exception as exc:
-                        run.stage_results[Stage.COMMIT] = StageResult(
-                            stage=Stage.COMMIT, ok=False, message=f"Commit failed: {exc}"
+                            stage=Stage.COMMIT, ok=True, message="Commit skipped by user"
                         )
                 else:
                     run.stage_results[Stage.COMMIT] = StageResult(
-                        stage=Stage.COMMIT, ok=True, message="Commit skipped by user"
+                        stage=Stage.COMMIT, ok=True, message="Commit gate skipped (no approval fn)"
                     )
-            else:
-                run.stage_results[Stage.COMMIT] = StageResult(
-                    stage=Stage.COMMIT, ok=True, message="Commit gate skipped (no approval fn)"
-                )
 
             # ── Stage 10: SUMMARY ─────────────────────────────────────
             emit(Stage.SUMMARY, "Generating final summary...")

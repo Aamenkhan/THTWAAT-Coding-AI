@@ -57,15 +57,17 @@ RULES:
 - Each step must have: "step" (int), "name" (string), "tool" (string), "args" (object).
 - Choose tools only from this list:
 {tool_list}
-- For file-modifying actions (WriteFile, CreateFile, ReplaceText, DeleteFile), always first ReadFile or SearchFiles to understand the current state.
-- Keep plans concise: 3–8 steps for simple tasks, up to 15 for complex ones.
+- CRITICAL: To modify an existing file, you MUST use WriteFile with the COMPLETE new file content in the "content" field. NEVER use ReplaceText to modify existing files — it is unreliable. Only use WriteFile.
+- The WriteFile args MUST have exactly two fields: "path" (the file path) and "content" (the full new file content as a string). No other field names are valid.
+- Always ReadFile first to get the current content before writing.
+- Keep plans concise: 2–5 steps.
 
 EXAMPLE OUTPUT:
 {{
   "goal": "Add a docstring to all functions in utils.py",
   "steps": [
     {{"step": 1, "name": "Read the file", "tool": "ReadFile", "args": {{"path": "utils.py"}}}},
-    {{"step": 2, "name": "Update with docstrings", "tool": "WriteFile", "args": {{"path": "utils.py", "content": "..."}}}}
+    {{"step": 2, "name": "Write improved version", "tool": "WriteFile", "args": {{"path": "utils.py", "content": "def foo():\n    \"\"\"Does foo.\"\"\"\n    pass\n"}}}}
   ]
 }}
 """
@@ -212,6 +214,8 @@ class Planner:
 
         if tool_name == "WriteFile":
             content = args.get("content", "")
+            if not content or content.strip() in ("", "..."):
+                return TR({"error": "WriteFile missing non-empty content"}, ok=False)
             edit = self.diff_engine.propose_edit(path, content, description=f"WriteFile: {path}")
         elif tool_name == "CreateFile":
             content = args.get("content", "")

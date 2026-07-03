@@ -172,10 +172,27 @@ class GitManager:
             return f"On branch {branch}\n{output}"
         return output
 
-    def commit(self, message: str) -> str:
+    def commit(self, message: str, files: list = None, allow_sensitive: bool = False) -> str:
         if not self.is_repo():
             self.init_repo()
-        self._run("add", "-A")
+            
+        if not files:
+            return "No explicit files provided for commit."
+            
+        import fnmatch
+        import os
+        sensitive_patterns = [".env", "*.key", "*secret*", "*credential*", "crash_reports/*", "config_backups/*"]
+        
+        for f in files:
+            normalized_f = f.replace('\\', '/')
+            is_sensitive = any(
+                fnmatch.fnmatch(normalized_f, pat) or fnmatch.fnmatch(os.path.basename(normalized_f), pat)
+                for pat in sensitive_patterns
+            )
+            if is_sensitive and not allow_sensitive:
+                return f"Safety guard: blocked staging of sensitive file '{f}'"
+                
+        self._run("add", *files)
         result = self._run("commit", "-m", message, check=False)
         output = result.stdout.strip() or result.stderr.strip()
         if result.returncode != 0:

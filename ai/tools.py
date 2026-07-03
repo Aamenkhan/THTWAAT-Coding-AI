@@ -216,11 +216,27 @@ def tool_git_diff(directory: str = ".", **_) -> ToolResult:
         return _err(str(exc))
 
 
-def tool_git_commit(message: str, directory: str = ".", **_) -> ToolResult:
-    """GitCommit — Stage all changes and commit."""
+def tool_git_commit(message: str, directory: str = ".", files: list = None, **_) -> ToolResult:
+    """GitCommit — Stage explicitly provided files and commit."""
+    if not files:
+        return _err("No explicit files provided. You must specify 'files' as a list.")
+        
     try:
+        import fnmatch
+        import os
+        sensitive_patterns = [".env", "*.key", "*secret*", "*credential*", "crash_reports/*", "config_backups/*"]
+        
+        for f in files:
+            normalized_f = f.replace('\\', '/')
+            is_sensitive = any(
+                fnmatch.fnmatch(normalized_f, pat) or fnmatch.fnmatch(os.path.basename(normalized_f), pat)
+                for pat in sensitive_patterns
+            )
+            if is_sensitive:
+                return _err(f"Safety guard: blocked staging of sensitive file '{f}'")
+                
         cwd = str(Path(directory).resolve())
-        subprocess.run(["git", "add", "-A"], cwd=cwd, capture_output=True)
+        subprocess.run(["git", "add", *files], cwd=cwd, capture_output=True)
         result = subprocess.run(
             ["git", "commit", "-m", message],
             cwd=cwd, capture_output=True, text=True,
