@@ -411,7 +411,9 @@ class MainWindow(QtWidgets.QMainWindow):
             "<b>This feature is experimental.</b><br><br>"
             "The AI Optimize pipeline may produce <b>incorrect, trivial, or "
             "unrelated changes</b> depending on the model and file complexity.<br><br>"
-            "<b>Always review every change carefully before accepting.</b>"
+            "<b>Always review every change carefully before accepting.</b><br><br>"
+            "<i>Note: changes must be accepted or rejected together — "
+            "individual file-level reject is not yet available.</i>"
         )
         warn.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
         warn.setDefaultButton(QMessageBox.StandardButton.Ok)
