@@ -402,6 +402,22 @@ class MainWindow(QtWidgets.QMainWindow):
             self.statusBar().showMessage("Open a file to optimize first")
             return
             
+        # Show one-time experimental warning before running
+        from PySide6.QtWidgets import QMessageBox
+        warn = QMessageBox(self)
+        warn.setWindowTitle("⚠️ Experimental Feature")
+        warn.setIcon(QMessageBox.Icon.Warning)
+        warn.setText(
+            "<b>This feature is experimental.</b><br><br>"
+            "The AI Optimize pipeline may produce <b>incorrect, trivial, or "
+            "unrelated changes</b> depending on the model and file complexity.<br><br>"
+            "<b>Always review every change carefully before accepting.</b>"
+        )
+        warn.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        warn.setDefaultButton(QMessageBox.StandardButton.Ok)
+        if warn.exec() != QMessageBox.StandardButton.Ok:
+            return
+
         self.chat_output.append("<b style='color:#007ACC;'>You:</b> Optimize current file\n")
         self.chat_output.append("<b style='color:#4EC9B0;'>Agent:</b> Starting optimization pipeline...\n")
         
