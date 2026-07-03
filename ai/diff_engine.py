@@ -82,14 +82,31 @@ class DiffEngine:
         new_text: str,
         description: str = "",
     ) -> Optional[PendingEdit]:
-        """Stage a targeted text replacement inside a file."""
+        """Stage a targeted text replacement inside a file.
+
+        Line endings are normalised to ``\\n`` before comparison so that
+        model-generated patterns (always ``\\n``) match Windows files (``\\r\\n``).
+        The proposed content is written back with the file's original line
+        ending style so disk files are not inadvertently converted.
+        """
         p = Path(path).resolve()
         if not p.exists():
             return None
         original = p.read_text(encoding="utf-8", errors="ignore")
-        if old_text not in original:
+        uses_crlf = "\r\n" in original
+
+        # Normalise both sides to \n for matching
+        original_norm = original.replace("\r\n", "\n")
+        old_text_norm = old_text.replace("\r\n", "\n")
+        new_text_norm = new_text.replace("\r\n", "\n")
+
+        if old_text_norm not in original_norm:
             return None
-        proposed = original.replace(old_text, new_text, 1)
+
+        proposed_norm = original_norm.replace(old_text_norm, new_text_norm, 1)
+
+        # Restore original line-ending style so we don't silently convert files
+        proposed = proposed_norm.replace("\n", "\r\n") if uses_crlf else proposed_norm
         return self.propose_edit(str(p), proposed, description)
 
     # ------------------------------------------------------------------
