@@ -407,6 +407,9 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Prepare Pipeline
         goal = f"Optimize {self.current_path}"
+        code = self.central_editor.text()
+        if code:
+            goal += f"\n\nFile content of {self.current_path}:\n```\n{code}\n```"
         self.current_pipeline = PipelineRun(goal=goal, run_id="opt-1")
         
         self.pipeline_worker = PipelineWorker(self.current_pipeline, self.diff_engine, self)
