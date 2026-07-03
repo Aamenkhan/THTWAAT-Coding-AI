@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-07-03T02:06:38.993510Z",
+  "version": "0.1.0",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.2 (tags/v3.11.2:878ead1, Feb  7 2023, 16:38:35) [MSC v.1934 64 bit (AMD64)]",
+  "exc_type": "ModuleNotFoundError",
+  "exc_message": "No module named 'ui.file_explorer'",
+  "traceback": [
+    "Traceback (most recent call last):\n",
+    "  File \"<string>\", line 13, in <module>\n",
+    "ModuleNotFoundError: No module named 'ui.file_explorer'\n"
+  ],
+  "argv": [
+    "-c"
+  ]
+}
