@@ -114,9 +114,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # BOTTOM-LEFT: Terminal / Problems / Output
         self.bottom_tabs = QtWidgets.QTabWidget(self)
-        self.terminal_page = QtWidgets.QTextEdit(self.bottom_tabs)
-        self.terminal_page.setPlainText("Terminal ready.\n")
-        self.terminal_page.setReadOnly(True)
+        from ui.terminal_widget import TerminalWidget
+        self.terminal_page = TerminalWidget(self.bottom_tabs)
         self.problems_page = QtWidgets.QTextEdit(self.bottom_tabs)
         self.problems_page.setPlainText("No problems detected.\n")
         self.problems_page.setReadOnly(True)
@@ -296,6 +295,18 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
 
     def new_file(self) -> None:
+        if self.central_editor.document().isModified():
+            from PySide6.QtWidgets import QMessageBox
+            reply = QMessageBox.question(
+                self, 'Unsaved Changes',
+                "Save changes before creating new file?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.save_current_file()
+            elif reply == QMessageBox.StandardButton.Cancel:
+                return
+                
         self.current_path = None
         self.central_editor.set_text("")
 
@@ -314,6 +325,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.current_path = path
         Path(self.current_path).write_text(self.central_editor.text(), encoding="utf-8")
         self.statusBar().showMessage(f"Saved {self.current_path}")
+        self.central_editor.document().setModified(False)
 
     def _on_search_result_selected(self, path: str, line: int):
         self.open_file(path)
@@ -396,17 +408,101 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.current_path and self.current_path.endswith(".py"):
             self.statusBar().showMessage(f"Running {self.current_path}")
             self.bottom_tabs.setCurrentIndex(0)
-            self.terminal_page.append(f"$ python {self.current_path}\n")
-            # Need to integrate real QProcess for executing
+            
+            cmd = f'python "{self.current_path}"'
+            
+            if hasattr(self.terminal_page, 'process') and self.terminal_page.process.state() == QtCore.QProcess.Running:
+                # Add command to terminal text
+                from PySide6 import QtGui
+                cursor = self.terminal_page.textCursor()
+                cursor.movePosition(QtGui.QTextCursor.End)
+                self.terminal_page.setTextCursor(cursor)
+                self.terminal_page.insertPlainText(cmd + "\n")
+                
+                # Update prompt position since we inserted text programmatically
+                self.terminal_page.prompt_position = self.terminal_page.textCursor().position()
+                
+                self.terminal_page.expected_echo = cmd + "\n"
+                self.terminal_page.process.write(cmd.encode('utf-8') + b'\r\n')
         else:
             self.statusBar().showMessage("No runnable Python file selected")
 
     def ai_edit(self) -> None:
-        self._submit_chat_with_message("AI Edit", "The editor action is ready for the next integration step.")
+        if not self.current_path:
+            self.statusBar().showMessage("Open a file to edit first")
+            return
+            
+        from PySide6.QtWidgets import QInputDialog
+        prompt, ok = QInputDialog.getText(self, "AI Edit", "What would you like to change?")
+        if not ok or not prompt:
+            return
+
+        self.chat_output.append(f"<b style='color:#007ACC;'>You:</b> Edit: {prompt}\n")
+        self.chat_output.append("<b style='color:#4EC9B0;'>Agent:</b> Starting edit pipeline...\n")
+        
+        cursor = self.central_editor.textCursor()
+        selected_text = cursor.selectedText()
+        
+        # QPlainTextEdit replaces newlines with U+2029 (Paragraph Separator) when getting selected text
+        if selected_text:
+            selected_text = selected_text.replace('\u2029', '\n')
+            context = f"Selected code in {self.current_path}:\n```\n{selected_text}\n```"
+        else:
+            code = self.central_editor.text()
+            context = f"File content of {self.current_path}:\n```\n{code}\n```"
+            
+        goal = f"Edit {self.current_path}: {prompt}\n\n{context}"
+        
+        self.current_pipeline = PipelineRun(goal=goal, run_id="edit-1")
+        
+        self.pipeline_worker = PipelineWorker(self.current_pipeline, self.diff_engine, self)
+        self.pipeline_worker.stage_changed.connect(self._on_pipeline_stage)
+        self.pipeline_worker.finished.connect(self._on_pipeline_finished)
+        self.pipeline_worker.review_requested.connect(self._on_pipeline_review_requested)
+        self.pipeline_worker.start()
 
     def explain(self) -> None:
-        self.chat_input.setText("Explain this code")
-        self._submit_chat()
+        if not self.current_path:
+            self.statusBar().showMessage("Open a file to explain first")
+            return
+            
+        cursor = self.central_editor.textCursor()
+        selected_text = cursor.selectedText()
+        if selected_text:
+            selected_text = selected_text.replace('\u2029', '\n')
+            code_context = f"Selected code in {self.current_path}:\n```\n{selected_text}\n```"
+            msg = "Explain the selected code."
+        else:
+            code_context = f"File content of {self.current_path}:\n```\n{self.central_editor.text()}\n```"
+            msg = "Explain this file."
+
+        self.chat_output.append(f'<b style="color:#007ACC;">You:</b> {msg}')
+        self.chat_output.append('<b style="color:#4EC9B0;">Agent:</b> ')
+        
+        if self.provider_router:
+            model = self.toolbar.model_selector.currentText()
+            model_map = {
+                "Ollama (Qwen)": "qwen2.5-coder:3b",
+                "Claude": "claude-3-5-sonnet-20241022",
+                "OpenAI": "gpt-4o",
+                "Gemini": "gemini-1.5-pro"
+            }
+            mapped_model = model_map.get(model, model)
+            
+            self.stop_gen_button.show()
+            self.chat_input.setEnabled(False)
+            
+            system_prompt = f"You are THTWAAT AI IDE Assistant.\n\nContext:\n{code_context}"
+
+            self.ai_worker = AIWorker(self.provider_router, "Explain this code in detail.", mapped_model, system_prompt, self)
+            self.ai_worker.token_received.connect(self._on_ai_token)
+            self.ai_worker.finished.connect(self._on_ai_finished)
+            self.ai_worker.error_occurred.connect(self._on_ai_error)
+            
+            self.stop_gen_button.clicked.connect(self.ai_worker.stop)
+            self.ai_worker.start()
+        else:
+            self.chat_output.insertPlainText("Error: Provider Router not initialized.\n")
 
     def optimize(self) -> None:
         if not self.current_path:
