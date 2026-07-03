@@ -103,9 +103,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.chat_input.setPlaceholderText("Ask the assistant...")
         self.chat_input.returnPressed.connect(self._submit_chat)
         
+        self.send_button = QtWidgets.QPushButton("Send")
+        self.send_button.clicked.connect(self._submit_chat)
+        
+        input_layout = QtWidgets.QHBoxLayout()
+        input_layout.addWidget(self.chat_input)
+        input_layout.addWidget(self.send_button)
+        input_layout.addWidget(self.stop_gen_button)
+        
         chat_layout.addWidget(self.chat_output)
-        chat_layout.addWidget(self.stop_gen_button)
-        chat_layout.addWidget(self.chat_input)
+        chat_layout.addLayout(input_layout)
         
         self.chat_dock = QtWidgets.QDockWidget("AI Chat", self)
         self.chat_dock.setWidget(self.chat_panel)
