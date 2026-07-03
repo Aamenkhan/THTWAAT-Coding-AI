@@ -186,12 +186,19 @@ class MainWindow(QtWidgets.QMainWindow):
     def update_model_status(self, model_name: str):
         self.status_model.setText(f"Model: {model_name}")
 
+    # Directories and files that are never shown in the project tree
+    _EXPLORER_IGNORE = {
+        "build", "dist", "config_backups", "__pycache__", "node_modules",
+        ".venv", "venv", ".mypy_cache", ".pytest_cache", ".tox",
+        "crash_reports",
+    }
+
     def _populate_project_explorer(self) -> None:
         self.project_explorer.clear()
-        
+
         if hasattr(self, 'search_panel'):
             self.search_panel.set_project_dir(str(self.project_root))
-            
+
         if not self.project_root.exists():
             return
 
@@ -200,10 +207,14 @@ class MainWindow(QtWidgets.QMainWindow):
         root_item.setData(0, QtCore.Qt.UserRole, str(self.project_root))
         root_item.setExpanded(True)
         self.project_explorer.addTopLevelItem(root_item)
-        
+
         def _add_children(parent_item, path: Path):
-            for child in sorted(path.iterdir()):
-                if child.name.startswith(".") or child.name == "__pycache__":
+            try:
+                children = sorted(path.iterdir())
+            except PermissionError:
+                return
+            for child in children:
+                if child.name.startswith(".") or child.name in self._EXPLORER_IGNORE:
                     continue
                 item = QtWidgets.QTreeWidgetItem([child.name])
                 item.setIcon(0, self.file_icon_provider.icon(QtCore.QFileInfo(str(child))))
