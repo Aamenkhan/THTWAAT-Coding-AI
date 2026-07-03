@@ -309,6 +309,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 
         self.current_path = None
         self.central_editor.set_text("")
+        self.statusBar().showMessage("New file created")
 
     def open_folder(self) -> None:
         folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Open Folder", str(self.project_root))
@@ -400,6 +401,18 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def open_file(self, path: str) -> None:
         if os.path.exists(path):
+            if self.central_editor.document().isModified():
+                from PySide6.QtWidgets import QMessageBox
+                reply = QMessageBox.question(
+                    self, 'Unsaved Changes',
+                    "Save changes before opening another file?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.save_current_file()
+                elif reply == QMessageBox.StandardButton.Cancel:
+                    return
+                    
             self.current_path = path
             self.central_editor.open_file(path)
             self.statusBar().showMessage(f"Opened {path}")
