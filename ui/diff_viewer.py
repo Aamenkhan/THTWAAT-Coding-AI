@@ -99,6 +99,19 @@ class DiffViewerDialog(QtWidgets.QDialog):
     # Data loading
     # ------------------------------------------------------------------
 
+
+    def _get_display_name(self, path: str) -> str:
+        import fnmatch
+        import os
+        sensitive_patterns = [".env", "*.key", "*secret*", "*credential*", "crash_reports/*", "config_backups/*"]
+        normalized_path = path.replace('\\', '/')
+        is_sensitive = any(
+            fnmatch.fnmatch(normalized_path, pat) or fnmatch.fnmatch(os.path.basename(normalized_path), pat)
+            for pat in sensitive_patterns
+        )
+        name = self._short_name(path)
+        return f"⚠️ [SENSITIVE] {name}" if is_sensitive else name
+
     def _refresh(self) -> None:
         """Reload file list from DiffEngine pending edits."""
         self.file_list.clear()
@@ -114,8 +127,11 @@ class DiffViewerDialog(QtWidgets.QDialog):
             return
 
         for edit in edits:
-            item = QtWidgets.QListWidgetItem(self._short_name(edit.path))
+            display_text = self._get_display_name(edit.path)
+            item = QtWidgets.QListWidgetItem(display_text)
             item.setData(QtCore.Qt.UserRole, edit.path)
+            if "⚠️" in display_text:
+                item.setForeground(QtGui.QColor("#FF4444"))
             item.setToolTip(edit.path)
             self.file_list.addItem(item)
 
@@ -146,7 +162,7 @@ class DiffViewerDialog(QtWidgets.QDialog):
             return
         path = item.data(QtCore.Qt.UserRole)
         self.diff_engine.accept(path)
-        item.setText("✅ " + self._short_name(path))
+        item.setText("✅ " + self._get_display_name(path))
         item.setForeground(QtGui.QColor("#A6E22E"))
         self.btn_accept_file.setEnabled(False)
         self.btn_reject_file.setEnabled(False)
@@ -158,18 +174,35 @@ class DiffViewerDialog(QtWidgets.QDialog):
             return
         path = item.data(QtCore.Qt.UserRole)
         self.diff_engine.reject(path)
-        item.setText("❌ " + self._short_name(path))
+        item.setText("❌ " + self._get_display_name(path))
         item.setForeground(QtGui.QColor("#F92672"))
         self.btn_accept_file.setEnabled(False)
         self.btn_reject_file.setEnabled(False)
         self._update_status()
 
     def _accept_all(self) -> None:
+        sensitive_files = []
+        for edit in self.diff_engine.pending_edits():
+            if "⚠️ [SENSITIVE]" in self._get_display_name(edit.path):
+                sensitive_files.append(self._short_name(edit.path))
+                
+        if sensitive_files:
+            msg = f"{len(sensitive_files)} sensitive file(s) are included in this batch:\n"
+            msg += "\n".join(f"- {f}" for f in sensitive_files)
+            msg += "\n\nAre you sure you want to accept them?"
+            reply = QtWidgets.QMessageBox.question(
+                self, "Confirm Sensitive Files", msg,
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No
+            )
+            if reply == QtWidgets.QMessageBox.No:
+                return
+
         self.diff_engine.accept_all()
         for i in range(self.file_list.count()):
             item = self.file_list.item(i)
             path = item.data(QtCore.Qt.UserRole)
-            item.setText("✅ " + self._short_name(path))
+            item.setText("✅ " + self._get_display_name(path))
             item.setForeground(QtGui.QColor("#A6E22E"))
         self.btn_accept_file.setEnabled(False)
         self.btn_reject_file.setEnabled(False)
@@ -182,7 +215,7 @@ class DiffViewerDialog(QtWidgets.QDialog):
         for i in range(self.file_list.count()):
             item = self.file_list.item(i)
             path = item.data(QtCore.Qt.UserRole)
-            item.setText("❌ " + self._short_name(path))
+            item.setText("❌ " + self._get_display_name(path))
             item.setForeground(QtGui.QColor("#F92672"))
         self.btn_accept_file.setEnabled(False)
         self.btn_reject_file.setEnabled(False)
