@@ -18,12 +18,18 @@ class OllamaClient:
                 stream=stream,
             )
         except requests.exceptions.ConnectionError as exc:
-            raise RuntimeError("Ollama is not running. Start the Ollama service locally and ensure the model is available.") from exc
+            err_msg = "Ollama is not running. Start the Ollama service locally and ensure the model is available."
+            print(f"Ollama API Error: {err_msg}")
+            raise RuntimeError(err_msg) from exc
         except requests.exceptions.RequestException as exc:
-            raise RuntimeError(f"Ollama request failed: {exc}") from exc
+            err_msg = f"Ollama request failed: {exc}"
+            print(f"Ollama API Error: {err_msg}")
+            raise RuntimeError(err_msg) from exc
 
         if response.status_code != 200:
-            raise RuntimeError(f"Ollama returned status {response.status_code}: {response.text}")
+            err_msg = f"Ollama returned status {response.status_code}: {response.text}"
+            print(f"Ollama API Error: {err_msg}")
+            raise RuntimeError(err_msg)
         return response
 
     def generate(self, prompt: str, model: str = "qwen2.5-coder:3b") -> str:
@@ -44,8 +50,13 @@ class OllamaClient:
                     continue
                 try:
                     payload = json.loads(line)
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as exc:
+                    print(f"Failed to parse JSON line from Ollama: {line!r} - {exc}")
                     continue
+                
+                if "error" in payload:
+                    raise RuntimeError(f"Ollama API error: {payload['error']}")
+                    
                 chunk = payload.get("response", "")
                 if chunk:
                     yield chunk
