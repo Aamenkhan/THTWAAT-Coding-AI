@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-07-03T00:46:51.530723Z",
+  "version": "0.1.0",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.2 (tags/v3.11.2:878ead1, Feb  7 2023, 16:38:35) [MSC v.1934 64 bit (AMD64)]",
+  "exc_type": "ImportError",
+  "exc_message": "cannot import name 'execute_stage' from 'ai.pipeline' (E:\\AI_Project\\ai\\pipeline.py)",
+  "traceback": [
+    "Traceback (most recent call last):\n",
+    "  File \"e:\\AI_Project\\test_ui2.py\", line 12, in <module>\n    from ui.main_window import MainWindow\n",
+    "  File \"E:\\AI_Project\\ui\\main_window.py\", line 11, in <module>\n    from ui.pipeline_worker import PipelineWorker\n",
+    "  File \"E:\\AI_Project\\ui\\pipeline_worker.py\", line 3, in <module>\n    from ai.pipeline import PipelineRun, execute_stage, Stage\n",
+    "ImportError: cannot import name 'execute_stage' from 'ai.pipeline' (E:\\AI_Project\\ai\\pipeline.py)\n"
+  ],
+  "argv": [
+    "e:\\AI_Project\\test_ui2.py"
+  ]
+}

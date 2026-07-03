@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-07-03T01:12:44.881049Z",
+  "version": "0.1.0",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.2 (tags/v3.11.2:878ead1, Feb  7 2023, 16:38:35) [MSC v.1934 64 bit (AMD64)]",
+  "exc_type": "AttributeError",
+  "exc_message": "'PendingEdit' object has no attribute 'new_content'",
+  "traceback": [
+    "Traceback (most recent call last):\n",
+    "  File \"E:\\AI_Project\\ui\\main_window.py\", line 425, in _on_pipeline_review_requested\n    if dialog.exec():\n       ^^^^^^^^^^^^^\n",
+    "  File \"e:\\AI_Project\\test_ui4.py\", line 35, in exec\n    print(f\"Content length: {len(edit.new_content)}\")\n                                 ^^^^^^^^^^^^^^^^\n",
+    "AttributeError: 'PendingEdit' object has no attribute 'new_content'\n"
+  ],
+  "argv": [
+    "e:\\AI_Project\\test_ui4.py"
+  ]
+}

@@ -1,0 +1,37 @@
+from PySide6 import QtCore
+import threading
+from ai.pipeline import PipelineRun, Stage
+
+class PipelineWorker(QtCore.QThread):
+    stage_changed = QtCore.Signal(str, int)  # label, progress
+    finished = QtCore.Signal(bool, str)      # success, result_message
+    
+    def __init__(self, run_instance: PipelineRun, diff_engine, parent=None):
+        super().__init__(parent)
+        self.run_instance = run_instance
+        self.diff_engine = diff_engine
+
+    def run(self):
+        try:
+            # We execute until REVIEW or DONE
+            while self.run_instance.stage != Stage.DONE:
+                if self.run_instance.stage == Stage.REVIEW:
+                    # We pause here so the UI can show the DiffViewer
+                    self.stage_changed.emit("Awaiting Review", self.run_instance.progress_percent)
+                    return
+                
+                # Report current stage
+                from ai.pipeline import _STAGE_LABELS
+                label = _STAGE_LABELS.get(self.run_instance.stage, str(self.run_instance.stage))
+                self.stage_changed.emit(label, self.run_instance.progress_percent)
+                
+                # Execute the stage
+                # execute_stage(self.run_instance)
+                
+                if self.run_instance.status == "failed":
+                    self.finished.emit(False, f"Pipeline failed: {self.run_instance.result}")
+                    return
+                    
+            self.finished.emit(True, "Pipeline completed successfully.")
+        except Exception as e:
+            self.finished.emit(False, str(e))

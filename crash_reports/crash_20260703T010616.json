@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-07-03T01:06:16.591492Z",
+  "version": "0.1.0",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.2 (tags/v3.11.2:878ead1, Feb  7 2023, 16:38:35) [MSC v.1934 64 bit (AMD64)]",
+  "exc_type": "AttributeError",
+  "exc_message": "'PipelineRun' object has no attribute 'context'",
+  "traceback": [
+    "Traceback (most recent call last):\n",
+    "  File \"e:\\AI_Project\\test_ui4.py\", line 53, in run_test\n    window.optimize()\n",
+    "  File \"E:\\AI_Project\\ui\\main_window.py\", line 411, in optimize\n    self.current_pipeline.context[\"target_file\"] = self.current_path\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+    "AttributeError: 'PipelineRun' object has no attribute 'context'\n"
+  ],
+  "argv": [
+    "e:\\AI_Project\\test_ui4.py"
+  ]
+}

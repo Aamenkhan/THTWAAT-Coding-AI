@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-07-03T00:47:34.843139Z",
+  "version": "0.1.0",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.2 (tags/v3.11.2:878ead1, Feb  7 2023, 16:38:35) [MSC v.1934 64 bit (AMD64)]",
+  "exc_type": "AttributeError",
+  "exc_message": "'PySide6.QtCore.Signal' object has no attribute 'connect'",
+  "traceback": [
+    "Traceback (most recent call last):\n",
+    "  File \"e:\\AI_Project\\test_ui2.py\", line 17, in <module>\n    window = MainWindow()\n             ^^^^^^^^^^^^\n",
+    "  File \"E:\\AI_Project\\ui\\main_window.py\", line 55, in __init__\n    self._build_ui()\n",
+    "  File \"E:\\AI_Project\\ui\\main_window.py\", line 63, in _build_ui\n    self.central_editor.inline_completion_requested.connect(self._on_inline_completion_requested)\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+    "AttributeError: 'PySide6.QtCore.Signal' object has no attribute 'connect'\n"
+  ],
+  "argv": [
+    "e:\\AI_Project\\test_ui2.py"
+  ]
+}
