@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Aamenkhan/THTWAAT-Coding-AI/main/assets/Banner.png" width="100%">
+  <img src="https://raw.githubusercontent.com/Aamenkhan/THTWAAT-Coding-AI/main/assets/banner.png" width="100%">
 </p>
 
 <h1 align="center">🤖 THTWAAT Coding AI</h1>
