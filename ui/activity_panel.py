@@ -3,12 +3,11 @@ ui/activity_panel.py — Agent Activity Panel (Feature 17)
 Live log of all agent actions, tool calls, and events.
 """
 
-import tkinter as tk
+import html
 from datetime import datetime
 from typing import Optional
 
-import customtkinter as ctk
-
+from PySide6 import QtCore, QtGui, QtWidgets
 
 _BG     = "#0d1117"
 _HDR_BG = "#161b22"
@@ -21,67 +20,88 @@ _BLUE   = "#58a6ff"
 _PURPLE = "#a371f7"
 
 
-class ActivityPanel(ctk.CTkFrame):
+class ActivityPanel(QtWidgets.QFrame):
     """
     Real-time log panel showing what the agent is doing:
     tool calls, plan steps, file operations, errors.
     Color-coded by event type.
     """
+    
+    # Thread-safe signal for cross-thread logging
+    log_requested = QtCore.Signal(str, str)
 
-    def __init__(self, parent, app=None):
-        super().__init__(parent, fg_color=_BG)
+    def __init__(self, parent=None, app=None):
+        super().__init__(parent)
         self.app = app
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
         self._event_count = 0
+        
+        self.log_requested.connect(self._insert)
+        
+        self.setStyleSheet(f"QFrame {{ background-color: {_BG}; }}")
         self._build()
 
     def _build(self) -> None:
+        layout = QtWidgets.QGridLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
         # Header
-        header = ctk.CTkFrame(self, fg_color=_HDR_BG, corner_radius=0)
-        header.grid(row=0, column=0, sticky="ew")
-        header.grid_columnconfigure(1, weight=1)
-
-        ctk.CTkLabel(
-            header, text="⚡ Agent Activity",
-            font=("Segoe UI", 13, "bold"),
-        ).grid(row=0, column=0, padx=12, pady=8, sticky="w")
-
-        self._count_label = ctk.CTkLabel(
-            header, text="0 events", font=("Segoe UI", 10), text_color=_MUTED,
-        )
-        self._count_label.grid(row=0, column=1, sticky="e", padx=8)
-
-        ctk.CTkButton(
-            header, text="Clear", width=70,
-            command=self.clear,
-        ).grid(row=0, column=2, padx=8)
-
+        header = QtWidgets.QFrame(self)
+        header.setStyleSheet(f"QFrame {{ background-color: {_HDR_BG}; }}")
+        header_layout = QtWidgets.QHBoxLayout(header)
+        header_layout.setContentsMargins(12, 8, 12, 8)
+        header_layout.setSpacing(8)
+        
+        title_lbl = QtWidgets.QLabel("⚡ Agent Activity")
+        title_lbl.setStyleSheet(f"color: {_FG}; font-family: 'Segoe UI'; font-size: 13px; font-weight: bold;")
+        
+        self._count_label = QtWidgets.QLabel("0 events")
+        self._count_label.setStyleSheet(f"color: {_MUTED}; font-family: 'Segoe UI'; font-size: 10px;")
+        
+        clear_btn = QtWidgets.QPushButton("Clear")
+        clear_btn.setFixedWidth(70)
+        clear_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #21262d;
+                color: {_FG};
+                border: 1px solid #30363d;
+                border-radius: 4px;
+                padding: 4px;
+            }}
+            QPushButton:hover {{
+                background-color: #30363d;
+            }}
+        """)
+        clear_btn.clicked.connect(self.clear)
+        
+        header_layout.addWidget(title_lbl)
+        header_layout.addStretch()
+        header_layout.addWidget(self._count_label)
+        header_layout.addWidget(clear_btn)
+        
+        layout.addWidget(header, 0, 0)
+        
         # Log text widget
-        self._log = tk.Text(
-            self, bg=_BG, fg=_FG,
-            font=("Consolas", 10), wrap="word",
-            relief="flat", state="disabled", padx=6, pady=4,
-        )
-        self._log.grid(row=1, column=0, sticky="nsew", padx=4, pady=4)
-
-        scroll = ctk.CTkScrollbar(self, command=self._log.yview)
-        scroll.grid(row=1, column=1, sticky="ns")
-        self._log.configure(yscrollcommand=scroll.set)
-
-        # Tags
-        self._log.tag_configure("ts",      foreground=_MUTED,   font=("Consolas", 9))
-        self._log.tag_configure("tool",    foreground=_BLUE,    font=("Consolas", 10, "bold"))
-        self._log.tag_configure("success", foreground=_GREEN)
-        self._log.tag_configure("error",   foreground=_RED)
-        self._log.tag_configure("warn",    foreground=_YELLOW)
-        self._log.tag_configure("plan",    foreground=_PURPLE,  font=("Consolas", 10, "bold"))
-        self._log.tag_configure("info",    foreground=_FG)
-        self._log.tag_configure("diff",    foreground=_YELLOW)
+        self._log = QtWidgets.QTextEdit(self)
+        self._log.setReadOnly(True)
+        self._log.setLineWrapMode(QtWidgets.QTextEdit.WidgetWidth)
+        self._log.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {_BG};
+                color: {_FG};
+                font-family: Consolas, 'Courier New', monospace;
+                font-size: 10px;
+                border: none;
+                padding: 4px;
+            }}
+        """)
+        
+        layout.addWidget(self._log, 1, 0)
+        layout.setRowStretch(1, 1)
 
     def log(self, message: str, level: str = "info") -> None:
-        """Add an event to the activity log. Thread-safe (uses after())."""
-        self.after(0, self._insert, message, level)
+        """Add an event to the activity log. Thread-safe (uses signals)."""
+        self.log_requested.emit(message, level)
 
     def log_tool(self, tool_name: str, args: dict, ok: bool) -> None:
         status = "✅" if ok else "❌"
@@ -99,18 +119,41 @@ class ActivityPanel(ctk.CTkFrame):
         self.log(f"💥 {error}", "error")
 
     def clear(self) -> None:
-        self._log.configure(state="normal")
-        self._log.delete("1.0", tk.END)
-        self._log.configure(state="disabled")
+        self._log.clear()
         self._event_count = 0
-        self._count_label.configure(text="0 events")
+        self._count_label.setText("0 events")
 
+    @QtCore.Slot(str, str)
     def _insert(self, message: str, level: str) -> None:
         self._event_count += 1
         ts = datetime.now().strftime("%H:%M:%S")
-        self._log.configure(state="normal")
-        self._log.insert(tk.END, f"[{ts}] ", "ts")
-        self._log.insert(tk.END, f"{message}\n", level)
-        self._log.see(tk.END)
-        self._log.configure(state="disabled")
-        self._count_label.configure(text=f"{self._event_count} events")
+        
+        # Tags mapping
+        colors = {
+            "tool": _BLUE,
+            "success": _GREEN,
+            "error": _RED,
+            "warn": _YELLOW,
+            "plan": _PURPLE,
+            "info": _FG,
+            "diff": _YELLOW
+        }
+        color = colors.get(level, _FG)
+        bold = level in ["tool", "plan"]
+        
+        font_weight = "bold" if bold else "normal"
+        
+        # Escape HTML characters to prevent rendering issues with < or >
+        escaped_message = html.escape(message)
+        
+        # We use a span-based approach for appending rich text
+        html_str = f'<span style="color: {_MUTED}; font-size: 9pt;">[{ts}] </span>' \
+                   f'<span style="color: {color}; font-weight: {font_weight};">{escaped_message}</span>'
+        
+        self._log.append(html_str)
+        
+        # Auto-scroll to bottom
+        scrollbar = self._log.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+        
+        self._count_label.setText(f"{self._event_count} events")
