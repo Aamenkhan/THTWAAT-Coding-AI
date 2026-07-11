@@ -9,3 +9,5 @@ build/
 *.log
 *.zip
 *.exe
+# AI Indexer cache
+.ai/

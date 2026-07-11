@@ -1,7 +1,7 @@
 """
 ai/workspace_search.py — Workspace Search (Feature 11)
 Find symbol, find references, rename symbol, go to definition,
-project-wide full-text search.
+project-wide full-text search. Now powered by Phase 9 Project Indexer.
 """
 
 import re
@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import difflib
 
+from ai.indexer import ProjectIndexer
 
-_SKIP_DIRS = {"__pycache__", ".git", ".venv", "venv", "node_modules", "build", "dist"}
+_SKIP_DIRS = {"__pycache__", ".git", ".venv", "venv", "node_modules", "build", "dist", ".ai"}
 _CODE_EXTS = {".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".cs", ".go", ".rs", ".php", ".dart"}
 
 
@@ -36,11 +37,13 @@ class SearchResult:
 class WorkspaceSearch:
     """
     Full workspace search and symbol navigation.
-    Works with any language that uses common definition patterns.
+    Uses fast SQLite indexer first, falls back to direct filesystem scan.
     """
 
     def __init__(self, project_dir: str):
         self.project_dir = Path(project_dir).resolve()
+        self.indexer = ProjectIndexer(str(self.project_dir))
+        self.indexer.index_project() # Start background indexing
 
     # ------------------------------------------------------------------
     # Symbol definition
@@ -48,6 +51,31 @@ class WorkspaceSearch:
 
     def find_symbol(self, name: str) -> List[SymbolLocation]:
         """Find the definition location(s) of a class, function, or method."""
+        # 1. Try SQLite Indexer
+        if self.indexer.is_ready:
+            indexed_results = self.indexer.search_symbol(name)
+            if indexed_results:
+                results = []
+                for res in indexed_results:
+                    path = Path(res["path"])
+                    ctx = ""
+                    try:
+                        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+                        if 1 <= res["line"] <= len(lines):
+                            ctx = lines[res["line"] - 1].strip()
+                    except Exception:
+                        pass
+                        
+                    results.append(SymbolLocation(
+                        path=res["path"],
+                        line=res["line"],
+                        column=0, # Indexer doesn't track exact column yet
+                        symbol_type=res["kind"],
+                        context=ctx
+                    ))
+                return results
+
+        # 2. Fallback to Filesystem Scan
         results: List[SymbolLocation] = []
         patterns = [
             (re.compile(rf"^\s*def\s+{re.escape(name)}\s*\(", re.M), "function"),
@@ -83,6 +111,20 @@ class WorkspaceSearch:
 
     def find_references(self, name: str) -> List[SymbolLocation]:
         """Find all usages (references) of a symbol across the project."""
+        if self.indexer.is_ready:
+            indexed_refs = self.indexer.find_references(name)
+            if indexed_refs:
+                results = []
+                for res in indexed_refs:
+                    results.append(SymbolLocation(
+                        path=res["path"],
+                        line=res["line"],
+                        column=0,
+                        symbol_type="reference",
+                        context=res["text"]
+                    ))
+                return results
+
         results: List[SymbolLocation] = []
         pattern = re.compile(rf"\b{re.escape(name)}\b")
         for path in self._all_files():
@@ -114,8 +156,6 @@ class WorkspaceSearch:
     ) -> Dict[str, str]:
         """
         Rename all occurrences of a symbol across the project.
-        If dry_run is True, returns {file_path: diff_string} without writing.
-        Otherwise, writes to disk and returns {file_path: "success"}.
         """
         pattern = re.compile(rf"\b{re.escape(old_name)}\b")
         results: Dict[str, str] = {}
@@ -129,6 +169,7 @@ class WorkspaceSearch:
                     results[str(path)] = new_content
                 else:
                     path.write_text(new_content, encoding="utf-8")
+                    self.indexer.update_file(str(path)) # Inform indexer
                     results[str(path)] = f"Replaced {count} instances"
         return results
 
