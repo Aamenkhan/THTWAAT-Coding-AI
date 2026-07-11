@@ -324,6 +324,16 @@ class ProjectIndexer:
                     pass
         return results
 
+    def get_file_content(self, path: str) -> Optional[str]:
+        """Fetch file content quickly by reading from disk."""
+        p = Path(path).resolve()
+        try:
+            if p.is_file():
+                return p.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            pass
+        return None
+
     @property
     def is_ready(self) -> bool:
         return self._is_indexed
