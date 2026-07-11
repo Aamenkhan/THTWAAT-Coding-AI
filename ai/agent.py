@@ -1,17 +1,14 @@
 """
 ai/agent.py — Master AI Agent
-Stage 3 + Features 4-18: All systems integrated.
-Capable of receiving one prompt and autonomously:
-  Analyze → Plan → Find Files → Create/Edit → Test → Fix → Show Diffs
-  → Commit (after approval) → Summarize
-Production-quality. SOLID principles. No placeholder code.
+Phase 8: Direct OllamaClient calls replaced with ProviderRouter.
+         Public API identical. No refactoring outside provider routing.
 """
 
 import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
-from ai.ollama_client import OllamaClient
+from ai.providers import ProviderRouter, build_router_from_config
 from ai.tools import call_tool, list_tools, ToolResult
 from ai.diff_engine import DiffEngine
 from ai.planner import Planner, Plan, ProgressCallback
@@ -39,29 +36,49 @@ class AIAgent:
         base_url: Optional[str] = None,
         project_dir: str = ".",
         memory_path: Optional[str] = None,
+        provider_router: Optional[ProviderRouter] = None,
     ):
         self.model = model
         self.project_dir = str(Path(project_dir).resolve())
 
-        # Core AI
-        self.client = OllamaClient(base_url=base_url)
+        # Phase 8: route through ProviderRouter instead of raw OllamaClient.
+        # If no router is supplied, build a minimal Ollama-only router so that
+        # all existing callers that pass only (model, base_url) still work.
+        if provider_router is not None:
+            self.client = provider_router
+        else:
+            url = base_url or "http://localhost:11434"
+            _fallback_cfg = {
+                "primary_provider": "ollama",
+                "providers": {"ollama": {"base_url": url}},
+            }
+            self.client = build_router_from_config(_fallback_cfg)
+
+        # Extract the raw OllamaClient from the router's ollama provider so
+        # subsystems that accept ollama_client= continue working unchanged.
+        _ollama_provider = getattr(self.client, "_providers", {}).get("ollama")
+        _raw_ollama = getattr(_ollama_provider, "_client", None)
+        if _raw_ollama is None:
+            # Fallback: build a bare OllamaClient for subsystems
+            from ai.ollama_client import OllamaClient
+            _raw_ollama = OllamaClient(base_url=base_url or "http://localhost:11434")
 
         # Feature systems
         self.diff_engine    = DiffEngine(on_change=self._on_file_change)
         self.context_engine = ContextEngine(project_dir)
         self.memory         = SessionMemory(persist_path=memory_path)
         self.security       = SecurityGuard(approval_callback=self._security_approval)
-        self.error_recovery = ErrorRecovery(self.client, model=model)
+        self.error_recovery = ErrorRecovery(_raw_ollama, model=model)
         self.workspace      = WorkspaceSearch(project_dir)
-        self.reviewer       = CodeReviewer(self.client, model=model)
-        self.git            = GitManager(project_dir, ollama_client=self.client, model=model)
+        self.reviewer       = CodeReviewer(_raw_ollama, model=model)
+        self.git            = GitManager(project_dir, ollama_client=_raw_ollama, model=model)
         self.language       = LanguageSupport()
         self.task_queue     = TaskQueue(agent=self)
         self.terminal       = TerminalAgent(
-            ollama_client=self.client, model=model, default_cwd=self.project_dir
+            ollama_client=_raw_ollama, model=model, default_cwd=self.project_dir
         )
         self.planner        = Planner(
-            ollama_client=self.client,
+            ollama_client=_raw_ollama,
             diff_engine=self.diff_engine,
             project_dir=self.project_dir,
             model=model,
