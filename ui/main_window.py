@@ -13,6 +13,7 @@ from ui.diff_viewer import DiffViewerDialog
 from ui.workspace_search_panel import WorkspaceSearchPanel
 from ai.pipeline import PipelineRun, Stage
 from ai.diff_engine import DiffEngine
+from ai.tab_complete import GeminiTabComplete
 
 # Assuming these exist from earlier steps (Stage 3 & 4)
 try:
@@ -44,6 +45,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.current_path: Optional[str] = None
         self.open_files: dict[str, str] = {}
         self.toolbar_buttons: list[QtWidgets.QPushButton] = []
+        self.attached_image_path: Optional[str] = None
         
         # Configuration/State
         self.config = {}
@@ -54,6 +56,31 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self._build_ui()
         self._setup_status_bar()
+
+    def set_config(self, config: dict):
+        self.config = config
+        model = self.config.get("model")
+        if model:
+            self.toolbar.set_model(model)
+
+        # Wire Gemini Tab Autocomplete if API key is configured
+        gemini_key = (
+            config.get("gemini_api_key")
+            or config.get("providers", {}).get("gemini", {}).get("api_key", "")
+        )
+        if gemini_key:
+            self._tab_completer = GeminiTabComplete(api_key=gemini_key)
+            self.central_editor.set_tab_completer(self._tab_completer)
+
+    def update_model_status(self, model: str):
+        if hasattr(self, 'config') and isinstance(self.config, dict):
+            if self.config.get("model") != model:
+                self.config["model"] = model
+                try:
+                    from packaging.packager import ConfigManager
+                    ConfigManager().save(self.config)
+                except Exception:
+                    pass
 
     def _build_ui(self) -> None:
         # CENTER: Editor
@@ -99,19 +126,31 @@ class MainWindow(QtWidgets.QMainWindow):
         self.stop_gen_button = QtWidgets.QPushButton("Stop Generation")
         self.stop_gen_button.hide()
         
+        # Thumbnail preview label
+        self.image_preview_label = QtWidgets.QLabel()
+        self.image_preview_label.hide()
+        self.image_preview_label.setMaximumHeight(100)
+        
         self.chat_input = QtWidgets.QLineEdit(self.chat_panel)
         self.chat_input.setPlaceholderText("Ask the assistant...")
         self.chat_input.returnPressed.connect(self._submit_chat)
+        
+        self.attach_button = QtWidgets.QPushButton("📎")
+        self.attach_button.setToolTip("Attach Image")
+        self.attach_button.setFixedWidth(30)
+        self.attach_button.clicked.connect(self.attach_image)
         
         self.send_button = QtWidgets.QPushButton("Send")
         self.send_button.clicked.connect(self._submit_chat)
         
         input_layout = QtWidgets.QHBoxLayout()
+        input_layout.addWidget(self.attach_button)
         input_layout.addWidget(self.chat_input)
         input_layout.addWidget(self.send_button)
         input_layout.addWidget(self.stop_gen_button)
         
         chat_layout.addWidget(self.chat_output)
+        chat_layout.addWidget(self.image_preview_label)
         chat_layout.addLayout(input_layout)
         
         self.chat_dock = QtWidgets.QDockWidget("AI Chat", self)
@@ -121,8 +160,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # BOTTOM-LEFT: Terminal / Problems / Output
         self.bottom_tabs = QtWidgets.QTabWidget(self)
-        from ui.terminal_widget import TerminalWidget
-        self.terminal_page = TerminalWidget(self.bottom_tabs)
+        from ui.terminal_widget import TerminalContainer
+        self.terminal_page = TerminalContainer(self.bottom_tabs)
         self.problems_page = QtWidgets.QTextEdit(self.bottom_tabs)
         self.problems_page.setPlainText("No problems detected.\n")
         self.problems_page.setReadOnly(True)
@@ -239,12 +278,30 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _submit_chat(self) -> None:
         text = self.chat_input.text().strip()
-        if not text:
+        if not text and not getattr(self, 'attached_image_path', None):
             return
+            
+        model = self.toolbar.model_selector.currentText()
+        
+        if getattr(self, 'attached_image_path', None):
+            vision_capable = any(m in model.lower() for m in ['llava', 'minicpm-v', 'llama3.2-vision', 'gpt-4o', 'gemini-1.5-pro', 'claude-3-5-sonnet'])
+            if "ollama" in model.lower() and not vision_capable:
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.warning(
+                    self, "Vision Not Supported",
+                    "Current model doesn't support images — switch to a vision-capable model"
+                )
+                return
         
         self.chat_output.append(f'<b style="color:#007ACC;">You:</b> {text}')
+        if getattr(self, 'attached_image_path', None):
+            self.chat_output.append(f'<i>[Attached Image: {Path(self.attached_image_path).name}]</i>')
+            
         self.chat_output.append('<b style="color:#4EC9B0;">Agent:</b> ')
         self.chat_input.clear()
+        
+        self.attached_image_path = None
+        self.image_preview_label.hide()
         
         if self.provider_router:
             model = self.toolbar.model_selector.currentText()
@@ -300,6 +357,19 @@ class MainWindow(QtWidgets.QMainWindow):
             self.stop_gen_button.clicked.disconnect(self.ai_worker.stop)
         except Exception:
             pass
+
+    def attach_image(self) -> None:
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Attach Image", "", "Images (*.png *.jpg *.jpeg)"
+        )
+        if path:
+            self.attached_image_path = path
+            from PySide6 import QtGui
+            pixmap = QtGui.QPixmap(path)
+            pixmap = pixmap.scaledToHeight(100, QtCore.Qt.SmoothTransformation)
+            self.image_preview_label.setPixmap(pixmap)
+            self.image_preview_label.setToolTip(path)
+            self.image_preview_label.show()
 
     def new_file(self) -> None:
         if self.central_editor.document().isModified():
@@ -382,7 +452,9 @@ class MainWindow(QtWidgets.QMainWindow):
             "Ollama (Qwen)": "qwen2.5-coder:3b",
             "Claude": "claude-3-5-sonnet-20241022",
             "OpenAI": "gpt-4o",
-            "Gemini": "gemini-1.5-pro"
+            "Gemini": "gemini-flash-latest",
+            "Gemini Pro": "gemini-2.0-flash",
+            "Gemini Flash": "gemini-flash-latest",
         }
         mapped_model = model_map.get(model, model)
         
@@ -431,19 +503,20 @@ class MainWindow(QtWidgets.QMainWindow):
             
             cmd = f'python "{self.current_path}"'
             
-            if hasattr(self.terminal_page, 'process') and self.terminal_page.process.state() == QtCore.QProcess.Running:
+            active_term = self.terminal_page.get_current_terminal()
+            if active_term and active_term.process.state() == QtCore.QProcess.Running:
                 # Add command to terminal text
                 from PySide6 import QtGui
-                cursor = self.terminal_page.textCursor()
+                cursor = active_term.textCursor()
                 cursor.movePosition(QtGui.QTextCursor.End)
-                self.terminal_page.setTextCursor(cursor)
-                self.terminal_page.insertPlainText(cmd + "\n")
+                active_term.setTextCursor(cursor)
+                active_term.insertPlainText(cmd + "\n")
                 
                 # Update prompt position since we inserted text programmatically
-                self.terminal_page.prompt_position = self.terminal_page.textCursor().position()
+                active_term.prompt_position = active_term.textCursor().position()
                 
-                self.terminal_page.expected_echo = cmd + "\n"
-                self.terminal_page.process.write(cmd.encode('utf-8') + b'\r\n')
+                active_term.expected_echo = cmd + "\n"
+                active_term.process.write(cmd.encode('utf-8') + b'\r\n')
         else:
             self.statusBar().showMessage("No runnable Python file selected")
 

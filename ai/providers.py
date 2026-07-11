@@ -234,7 +234,7 @@ class GeminiProvider(AIProvider):
         yield self.generate(prompt, model, system)
 
     def list_models(self) -> List[str]:
-        return ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
+        return ["gemini-flash-latest", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
 
     def health_check(self) -> bool:
         return bool(self.api_key)

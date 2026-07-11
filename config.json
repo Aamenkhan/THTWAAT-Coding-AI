@@ -1,6 +1,16 @@
 {
   "project_root": "C:/HP",
-  "model": "qwen2.5-coder:3b",
+  "model": "gemini-flash-latest",
+  "primary_provider": "gemini",
+  "gemini_api_key": "AIzaSyBnlaT1rfNi9fC8uWrW9FuCNVrHnPpwAEE",
+  "providers": {
+    "ollama": {
+      "base_url": "http://localhost:11434"
+    },
+    "gemini": {
+      "api_key": "AIzaSyBnlaT1rfNi9fC8uWrW9FuCNVrHnPpwAEE"
+    }
+  },
   "recent_projects": [
     "C:/HP"
   ]
