@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 # Bootstrap: crash reporter + config migration BEFORE any imports that may fail
-from packaging.packager import bootstrap, ConfigManager
+from packager.packager import bootstrap, ConfigManager
 config = bootstrap()
 
 from PySide6 import QtWidgets

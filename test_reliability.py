@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from packaging.packager import bootstrap
+from packager.packager import bootstrap
 config = bootstrap()
 
 from ai.ollama_client import OllamaClient

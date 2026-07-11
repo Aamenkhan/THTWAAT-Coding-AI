@@ -3,7 +3,7 @@ import threading
 from typing import Dict, Optional
 from ai.pipeline import PipelineRun, Stage, Pipeline
 from ai.agent import AIAgent
-from packaging.packager import ConfigManager
+from packager.packager import ConfigManager
 
 class PipelineWorker(QtCore.QThread):
     stage_changed = QtCore.Signal(str, int)  # label, progress

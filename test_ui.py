@@ -5,7 +5,7 @@ from PySide6 import QtWidgets, QtCore
 ROOT = Path('e:/AI_Project')
 sys.path.insert(0, str(ROOT))
 
-from packaging.packager import bootstrap
+from packager.packager import bootstrap
 config = bootstrap()
 from ai.providers import build_router_from_config
 from ui.main_window import MainWindow

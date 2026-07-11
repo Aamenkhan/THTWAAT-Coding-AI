@@ -77,7 +77,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if self.config.get("model") != model:
                 self.config["model"] = model
                 try:
-                    from packaging.packager import ConfigManager
+                    from packager.packager import ConfigManager
                     ConfigManager().save(self.config)
                 except Exception:
                     pass
