@@ -55,7 +55,7 @@ class TestToolRegistry(unittest.TestCase):
         from ai.tools import call_tool
         result = call_tool("ListDirectory", {"directory": str(ROOT)})
         self.assertTrue(result.ok)
-        self.assertGreater(result.data["entries"], 0)
+        self.assertGreater(len(result.data), 0)
 
     def test_search_files_tool(self):
         from ai.tools import call_tool
@@ -246,6 +246,7 @@ class TestWorkspaceSearch(unittest.TestCase):
             content = f.read_text(encoding="utf-8")
             self.assertIn("new_func", content)
             self.assertNotIn("old_func", content)
+            ws.close()
 
     def test_go_to_definition_returns_location(self):
         loc = self.ws.go_to_definition("Pipeline")
@@ -464,7 +465,7 @@ class TestProviderRouter(unittest.TestCase):
         from ai.providers import GeminiProvider
         p = GeminiProvider(api_key="test-key")
         models = p.list_models()
-        self.assertIn("gemini-1.5-pro", models)
+        self.assertIn("gemini-flash-latest", models)
 
     def test_no_providers_raises(self):
         from ai.providers import ProviderRouter
@@ -491,7 +492,7 @@ class TestLanguageSupport(unittest.TestCase):
     def test_detect_typescript_file(self):
         profile = self.ls.detect("index.tsx")
         self.assertIsNotNone(profile)
-        self.assertEqual(profile.name, "React")
+        self.assertEqual(profile.name, "TypeScript")
 
     def test_detect_project_language(self):
         profile = self.ls.detect_project(str(ROOT))

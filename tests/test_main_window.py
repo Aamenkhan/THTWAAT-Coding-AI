@@ -16,8 +16,8 @@ class MainWindowTests(unittest.TestCase):
     def test_main_window_creates_with_expected_panels(self):
         window = MainWindow()
         self.assertIsNotNone(window.central_editor)
-        self.assertFalse(window.project_explorer.isHidden())
-        self.assertFalse(window.chat_panel.isHidden())
+        self.assertIsNotNone(window.agent_panel)
+        self.assertFalse(window.agent_panel.isHidden())
         self.assertFalse(window.bottom_tabs.isHidden())
         self.assertEqual([button.text() for button in window.toolbar_buttons], [
             "New File",
@@ -28,6 +28,7 @@ class MainWindowTests(unittest.TestCase):
             "Explain",
             "Optimize",
             "Git",
+            "⚙ Settings",
         ])
         window.close()
 

@@ -105,6 +105,22 @@ class AIAgent:
             pass
 
     # ------------------------------------------------------------------
+    # Cleanup
+    # ------------------------------------------------------------------
+    def close(self):
+        if hasattr(self, 'db') and self.db:
+            try:
+                self.db.close()
+            except Exception:
+                pass
+        if hasattr(self, 'workspace') and self.workspace:
+            try:
+                if hasattr(self.workspace, 'indexer') and self.workspace.indexer:
+                    self.workspace.indexer.close()
+            except Exception:
+                pass
+
+    # ------------------------------------------------------------------
     # Feature 18 — Full Autonomous Goal Execution
     # ------------------------------------------------------------------
 

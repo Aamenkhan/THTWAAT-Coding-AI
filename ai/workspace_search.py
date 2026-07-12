@@ -7,7 +7,7 @@ project-wide full-text search. Now powered by Phase 9 Project Indexer.
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import difflib
 
 from ai.indexer import ProjectIndexer
@@ -206,6 +206,16 @@ class WorkspaceSearch:
                         context_after=after,
                     ))
         return results
+
+    def get_index_status(self) -> Dict[str, Any]:
+        """Returns stats about the index."""
+        if not self.indexer:
+            return {"status": "disabled"}
+        return self.indexer.get_status()
+
+    def close(self):
+        if self.indexer:
+            self.indexer.close()
 
     # ------------------------------------------------------------------
     # Helpers

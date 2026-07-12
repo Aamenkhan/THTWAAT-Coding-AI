@@ -7,6 +7,9 @@ from pathlib import Path
 from datetime import datetime
 import json
 from typing import List, Dict, Any, Optional
+from contextlib import closing
+
+from contextlib import contextmanager
 
 class DatabaseManager:
     def __init__(self, db_path: str):
@@ -14,8 +17,14 @@ class DatabaseManager:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
+    @contextmanager
     def _get_conn(self):
-        return sqlite3.connect(self.db_path, check_same_thread=False)
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _init_db(self):
         with self._get_conn() as conn:
@@ -74,3 +83,7 @@ class DatabaseManager:
             )
             rows = cursor.fetchall()
             return [{"role": r[0], "content": r[1], "timestamp": r[2]} for r in reversed(rows)]
+
+    def close(self):
+        # No persistent connection is held anymore, but provided for compatibility
+        pass

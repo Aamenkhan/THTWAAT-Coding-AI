@@ -15,6 +15,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
+from contextlib import contextmanager
 
 _SKIP_DIRS = {"__pycache__", ".git", ".venv", "venv", "node_modules", "build", "dist", ".ai"}
 _CODE_EXTS = {".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".cs", ".go", ".rs", ".php", ".dart"}
@@ -41,7 +42,7 @@ class ProjectIndexer:
         self.ai_dir.mkdir(parents=True, exist_ok=True)
         (self.ai_dir / "cache").mkdir(exist_ok=True)
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self.get_conn() as conn:
             cursor = conn.cursor()
             cursor.executescript("""
                 CREATE TABLE IF NOT EXISTS files(
@@ -84,17 +85,28 @@ class ProjectIndexer:
             """)
             conn.commit()
 
-    def get_conn(self) -> sqlite3.Connection:
+    @contextmanager
+    def get_conn(self):
         # SQLite objects created in a thread can only be used in that same thread
         # by default, but we can bypass or just create a new connection per query
         # since it's a local file. Using a new connection per operation is safest.
         conn = sqlite3.connect(self.db_path, timeout=5.0)
         conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     # ------------------------------------------------------------------
     # Background Indexing
     # ------------------------------------------------------------------
+    
+    def close(self):
+        """Stop background indexing thread cleanly."""
+        self._stop_event.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=1.0)
 
     def index_project(self):
         with self._lock:

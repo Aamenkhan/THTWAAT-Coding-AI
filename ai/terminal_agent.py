@@ -138,39 +138,41 @@ class TerminalAgent:
         cmd.status = CommandStatus.RUNNING
 
         try:
-            process = subprocess.Popen(
+            with subprocess.Popen(
                 cmd.command,
                 shell=True,
                 cwd=cmd.cwd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 bufsize=1,
-            )
-
-            stdout_lines: List[str] = []
-            stderr_lines: List[str] = []
-
-            def stream_pipe(pipe, lines, stream_name):
-                for line in pipe:
-                    lines.append(line)
-                    if output_callback:
-                        output_callback(stream_name, line)
-
-            t1 = threading.Thread(target=stream_pipe, args=(process.stdout, stdout_lines, "stdout"), daemon=True)
-            t2 = threading.Thread(target=stream_pipe, args=(process.stderr, stderr_lines, "stderr"), daemon=True)
-            t1.start(); t2.start()
-            process.wait(timeout=120)
-            t1.join(); t2.join()
-
-            cmd.stdout = "".join(stdout_lines)
-            cmd.stderr = "".join(stderr_lines)
-            cmd.returncode = process.returncode
-            cmd.status = CommandStatus.DONE if process.returncode == 0 else CommandStatus.FAILED
-
-            # On failure — ask LLM what to do next
-            if cmd.status == CommandStatus.FAILED and self.client:
-                cmd.next_action = self._suggest_next(cmd)
+            ) as process:
+                stdout_lines: List[str] = []
+                stderr_lines: List[str] = []
+    
+                def stream_pipe(pipe, lines, stream_name):
+                    if pipe:
+                        for line in pipe:
+                            lines.append(line)
+                            if output_callback:
+                                output_callback(stream_name, line)
+    
+                t1 = threading.Thread(target=stream_pipe, args=(process.stdout, stdout_lines, "stdout"), daemon=True)
+                t2 = threading.Thread(target=stream_pipe, args=(process.stderr, stderr_lines, "stderr"), daemon=True)
+                t1.start(); t2.start()
+                process.wait(timeout=120)
+                t1.join(); t2.join()
+    
+                cmd.stdout = "".join(stdout_lines)
+                cmd.stderr = "".join(stderr_lines)
+                cmd.returncode = process.returncode
+                cmd.status = CommandStatus.DONE if process.returncode == 0 else CommandStatus.FAILED
+    
+                # On failure — ask LLM what to do next
+                if cmd.status == CommandStatus.FAILED and self.client:
+                    cmd.next_action = self._suggest_next(cmd)
 
         except subprocess.TimeoutExpired:
             cmd.status = CommandStatus.FAILED
