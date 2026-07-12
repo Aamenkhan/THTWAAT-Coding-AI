@@ -21,7 +21,7 @@ from ui.workspace_search_panel import WorkspaceSearchPanel
 from ui.agent_panel import AgentPanel
 from ai.pipeline import PipelineRun, Stage
 from ai.diff_engine import DiffEngine
-from ai.tab_complete import GeminiTabComplete
+from ai.tab_complete import InlineCompletionController
 
 try:
     from ui.activity_panel import ActivityPanel
@@ -73,15 +73,6 @@ class MainWindow(QtWidgets.QMainWindow):
         model = config.get("model")
         if model:
             self.toolbar.set_model(model)
-
-        # Wire Gemini Tab Autocomplete if API key is configured
-        gemini_key = (
-            config.get("gemini_api_key")
-            or config.get("providers", {}).get("gemini", {}).get("api_key", "")
-        )
-        if gemini_key:
-            self._tab_completer = GeminiTabComplete(api_key=gemini_key)
-            self.central_editor.set_tab_completer(self._tab_completer)
 
     # ── Phase 3: Runtime model/provider switch ────────────────────────────────
 
@@ -689,10 +680,15 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self.statusBar().showMessage("Rename cancelled.")
 
-    def _on_inline_completion_requested(self, context_text: str) -> None:
+    def _on_inline_completion_requested(self, prefix: str, suffix: str) -> None:
         if not self.provider_router:
             return
-        # Phase 3: get_model_id() returns real model ID; model_map kept as fallback
+            
+        # Initialize controller if needed
+        if not hasattr(self, "inline_controller"):
+            self.inline_controller = InlineCompletionController(self.provider_router, self)
+            self.inline_controller.token_received.connect(self.central_editor.show_ghost_text)
+
         model = self.toolbar.get_model_id()
         model_map = {
             "Ollama (Qwen)": "qwen2.5-coder:3b",
@@ -704,34 +700,29 @@ class MainWindow(QtWidgets.QMainWindow):
         }
         mapped_model = model_map.get(model, model)
 
-        system_prompt = (
-            "You are an inline autocomplete engine. Complete the code following the context. "
-            "Provide ONLY the immediate next few words or line of code. "
-            "No formatting or explanation."
-        )
+        indexer = None
+        if hasattr(self, "agent_panel") and self.agent_panel.agent:
+            indexer = self.agent_panel.agent.workspace.indexer
 
-        if hasattr(self, "inline_worker") and self.inline_worker.isRunning():
-            self.inline_worker.stop()
-            self.inline_worker.wait()
-
-        self.inline_worker = AIWorker(
-            self.provider_router, context_text[-500:], mapped_model, system_prompt, self
-        )
-        self._inline_buffer = ""
-
-        def handle_token(token: str) -> None:
-            self._inline_buffer += token
-            self.central_editor.show_ghost_text(self._inline_buffer)
-
-        self.inline_worker.token_received.connect(handle_token)
-        self.inline_worker.start()
+        self.inline_controller.stream_completion(prefix, suffix, mapped_model, indexer)
 
     # ── Git ────────────────────────────────────────────────────────────────────
 
     def git(self) -> None:
-        self.agent_panel.append_system(
-            "Git workflow hooks are ready for the next integration step."
-        )
+        if not self.project_root:
+            self.statusBar().showMessage("Open a project folder first")
+            return
+        
+        self.agent_panel.append_user("Git Status")
+        import subprocess
+        try:
+            res = subprocess.run(["git", "status", "-s"], cwd=str(self.project_root), capture_output=True, text=True)
+            if not res.stdout.strip():
+                self.agent_panel.append_system("Git Status: Working tree clean.")
+            else:
+                self.agent_panel.append_system(f"Git Status — Pending changes:\n{res.stdout}")
+        except Exception as e:
+            self.agent_panel.append_error(f"Git error: {e}")
 
     def _submit_chat_with_message(self, title: str, message: str) -> None:
         """Legacy helper — kept for compatibility."""

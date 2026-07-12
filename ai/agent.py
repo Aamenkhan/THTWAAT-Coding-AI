@@ -74,6 +74,16 @@ class AIAgent:
         self.git            = GitManager(project_dir, ollama_client=_raw_ollama, model=model)
         self.language       = LanguageSupport()
         self.task_queue     = TaskQueue(agent=self)
+        
+        # Phase 11: SQLite Database for Chat History & Logging
+        try:
+            from ai.database import DatabaseManager
+            db_path = str(Path(self.project_dir) / ".ai" / "history.db")
+            self.db = DatabaseManager(db_path)
+        except Exception as e:
+            print(f"Failed to initialize DatabaseManager: {e}")
+            self.db = None
+
         self.terminal       = TerminalAgent(
             ollama_client=_raw_ollama, model=model, default_cwd=self.project_dir
         )
@@ -220,14 +230,32 @@ class AIAgent:
 
     def chat(self, prompt: str, context: Optional[str] = None) -> str:
         self.memory.add_prompt(prompt, mode="chat")
+        if self.db:
+            self.db.add_message("user", prompt)
+
         full_context = context
         if not full_context:
             full_context = self.context_engine.build_context(prompt, budget=2000)
         mem_summary = self.memory.get_summary()
-        return self.client.generate(
-            self._build_prompt(prompt, full_context, mem_summary),
-            model=self.model,
-        )
+
+        system_prompt, modified_prompt = self._get_language_prompt(prompt)
+        final_prompt = self._build_prompt(modified_prompt, full_context, mem_summary)
+
+        try:
+            response = self.client.generate(
+                final_prompt,
+                model=self.model,
+                system=system_prompt,
+            )
+            if self.db:
+                self.db.log_request(prompt, final_prompt, response, "")
+                self.db.add_message("assistant", response)
+            return response
+        except Exception as e:
+            err_msg = str(e)
+            if self.db:
+                self.db.log_request(prompt, final_prompt, "", err_msg)
+            raise e
 
     def stream_chat(
         self,
@@ -236,15 +264,62 @@ class AIAgent:
         stop_event: Optional[threading.Event] = None,
     ) -> Iterator[str]:
         self.memory.add_prompt(prompt, mode="chat")
+        if self.db:
+            self.db.add_message("user", prompt)
+
         full_context = context
         if not full_context:
             full_context = self.context_engine.build_context(prompt, budget=2000)
         mem_summary = self.memory.get_summary()
-        yield from self.client.generate_stream(
-            self._build_prompt(prompt, full_context, mem_summary),
-            model=self.model,
-            stop_event=stop_event,
+
+        system_prompt, modified_prompt = self._get_language_prompt(prompt)
+        final_prompt = self._build_prompt(modified_prompt, full_context, mem_summary)
+
+        full_response = ""
+        try:
+            for chunk in self.client.generate_stream(
+                final_prompt,
+                model=self.model,
+                system=system_prompt,
+                stop_event=stop_event,
+            ):
+                full_response += chunk
+                yield chunk
+            if self.db:
+                self.db.log_request(prompt, final_prompt, full_response, "")
+                self.db.add_message("assistant", full_response)
+        except Exception as e:
+            err_msg = str(e)
+            if self.db:
+                self.db.log_request(prompt, final_prompt, full_response, err_msg)
+            raise e
+
+    def _get_language_prompt(self, user_prompt: str) -> tuple[str, str]:
+        """Returns (system_prompt, modified_user_prompt) with language rules applied."""
+        language = "Auto"
+        try:
+            from packager.packager import ConfigManager
+            cfg = ConfigManager().load()
+            language = cfg.get("language", "Auto")
+        except Exception:
+            pass
+
+        system_prompt = (
+            "You are Thatwaat Agent AI.\n\n"
+            "Rules:\n"
+            "- Default language: Hindi.\n"
+            "- Agar user Hindi me baat kare to hamesha Hindi me jawab do.\n"
+            "- Agar user English me baat kare to English me jawab do.\n"
+            "- Agar user Hinglish me baat kare to Hinglish me jawab do.\n"
+            "- Programming code aur code comments English me rakho.\n"
+            "- Explanations user ki language me do.\n"
         )
+
+        modified_prompt = user_prompt
+        if language and language != "Auto":
+            modified_prompt = f"Reply in {language}.\n\n{user_prompt}"
+
+        return system_prompt, modified_prompt
 
     def chat_with_context(
         self,

@@ -166,6 +166,15 @@ class SettingsDialog(QtWidgets.QDialog):
         self._theme_combo.addItems(["Dark (VS Code)", "Light"])
         self._theme_combo.setStyleSheet(self._combo_css())
         form.addRow(theme_lbl, self._theme_combo)
+
+        # Language Selection (Phase 11)
+        lang_lbl = QtWidgets.QLabel("Language:")
+        lang_lbl.setStyleSheet(self._lbl_css())
+        self._lang_combo = QtWidgets.QComboBox()
+        self._lang_combo.addItems(["Auto", "Hindi", "English", "Hinglish"])
+        self._lang_combo.setStyleSheet(self._combo_css())
+        form.addRow(lang_lbl, self._lang_combo)
+
         return page
 
     def _page_providers(self) -> QtWidgets.QWidget:
@@ -335,6 +344,12 @@ class SettingsDialog(QtWidgets.QDialog):
     def _load_values(self) -> None:
         cfg = self.config
 
+        # General
+        language = cfg.get("language", "Hindi")
+        idx = self._lang_combo.findText(language)
+        if idx >= 0:
+            self._lang_combo.setCurrentIndex(idx)
+
         # Providers
         gemini_key = (
             cfg.get("gemini_api_key", "")
@@ -365,6 +380,9 @@ class SettingsDialog(QtWidgets.QDialog):
     def _collect_values(self) -> Dict[str, Any]:
         """Read widgets into a new config dict."""
         cfg: Dict[str, Any] = dict(self.config)
+
+        # General
+        cfg["language"] = self._lang_combo.currentText()
 
         # Providers
         gemini_key = self._gemini_key.text().strip()
